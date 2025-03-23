@@ -1,18 +1,36 @@
 import { StyleSheet, Text, View, TouchableOpacity } from "react-native";
 import React, { Suspense, useState } from "react";
 import { Canvas } from "@react-three/fiber/native";
-import Trigger from "@/components/3dModel/Trigger";
 import Loader from "@/components/3dModel/Loader";
 import { SafeAreaView } from "react-native-safe-area-context";
-import Starlink from "@/components/3dModel/Starlink";
 import useControls from "r3f-native-orbitcontrols";
 import { StatusBar } from "expo-status-bar";
 import Gradient from "@/components/3dModel/Gradient";
-import { router } from "expo-router";
 import { DrawingProvider } from "@/components/3dModel/DrawingContext";
 import DrawingTools from "@/components/3dModel/DrawingTools";
-import PremierBall from "@/components/3dModel/PremierBall";
+import Model3D from "@/components/3dModel/Model3D";
 import ModeSelector from "@/components/3dModel/ModeSelector";
+import * as THREE from "three";
+
+const models = [
+  {
+    name: "Starlink",
+    path: require("../../assets/models/Starlink.glb"),
+    scale: 1,
+    position: [0, -0.5, 0] as [number, number, number],
+    rotation: [0, 0, 0] as [number, number, number],
+    autoRotate: false,
+  },
+  {
+    name: "Premier Ball",
+    path: require("../../assets/models/premier_ball.glb"),
+    scale: 0.5,
+    position: [0, 0, 0] as [number, number, number],
+    rotation: [0, Math.PI, 0] as [number, number, number],
+    autoRotate: false,
+  },
+  // Buraya yeni modeller ekleyebilirsiniz
+];
 
 const Index = () => {
   const [loading, setLoading] = useState<boolean>(false);
@@ -20,17 +38,13 @@ const Index = () => {
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
   const [mode, setMode] = useState<"draw" | "move">("move");
 
-  console.log("Current mode in Index:", mode);
-
   const handleModeChange = (newMode: "draw" | "move") => {
-    console.log("Setting new mode in Index:", newMode);
     setMode(newMode);
   };
 
-  const models = [
-    { name: "Starlink", component: Starlink },
-    { name: "Premier Ball", path: "../../assets/models/premier_ball.glb" },
-  ];
+  const selectedModelData = models.find(
+    (model) => model.name === selectedModel
+  );
 
   if (!selectedModel) {
     return (
@@ -76,23 +90,72 @@ const Index = () => {
           >
             <Gradient />
             {loading && <Loader />}
-            <Canvas>
+            <Canvas
+              shadows
+              camera={{
+                fov: 45,
+                near: 0.1,
+                far: 1000,
+                position: [0, 2, 5],
+              }}
+              gl={{
+                antialias: true,
+                alpha: true,
+                preserveDrawingBuffer: true,
+              }}
+            >
               <OrbitControls
                 enablePan={false}
                 enableZoom={mode === "move"}
                 enableRotate={mode === "move"}
               />
-              <directionalLight position={[1, 0, 0]} args={["white", 2]} />
-              <directionalLight position={[-1, 0, 0]} args={["white", 2]} />
-              <directionalLight position={[0, 0, 1]} args={["white", 2]} />
-              <directionalLight position={[0, 0, -1]} args={["white", 2]} />
-              <directionalLight position={[0, 1, 0]} args={["white", 15]} />
-              <directionalLight position={[0, -1, 0]} args={["white", 2]} />
-              <Suspense fallback={<Trigger setLoading={setLoading} />}>
-                {selectedModel === "Starlink" ? (
-                  <Starlink mode={mode} />
-                ) : (
-                  <PremierBall mode={mode} />
+
+              {/* Ambient light for overall illumination */}
+              <ambientLight intensity={0.6} />
+
+              {/* Main directional lights */}
+              <directionalLight
+                position={[5, 5, 5]}
+                intensity={0.8}
+                castShadow
+                shadow-mapSize-width={2048}
+                shadow-mapSize-height={2048}
+                shadow-camera-far={50}
+                shadow-camera-near={0.1}
+                shadow-camera-left={-10}
+                shadow-camera-right={10}
+                shadow-camera-top={10}
+                shadow-camera-bottom={-10}
+              />
+
+              <directionalLight
+                position={[-5, 5, -5]}
+                intensity={0.6}
+                castShadow
+              />
+
+              {/* Hemisphere light for better ambient lighting */}
+              <hemisphereLight
+                intensity={0.4}
+                groundColor={new THREE.Color(0x080820)}
+                position={[0, 1, 0]}
+              />
+
+              {/* Fill lights for better coverage */}
+              <pointLight position={[0, 5, 0]} intensity={0.3} />
+              <pointLight position={[0, -5, 0]} intensity={0.2} />
+              <pointLight position={[5, 0, 0]} intensity={0.3} />
+              <pointLight position={[-5, 0, 0]} intensity={0.3} />
+
+              <Suspense fallback={null}>
+                {selectedModelData && (
+                  <Model3D
+                    mode={mode}
+                    modelPath={selectedModelData.path}
+                    scale={selectedModelData.scale}
+                    position={selectedModelData.position}
+                    rotation={selectedModelData.rotation}
+                  />
                 )}
               </Suspense>
             </Canvas>
@@ -100,18 +163,6 @@ const Index = () => {
         </View>
 
         {mode === "draw" && <DrawingTools />}
-
-        <View style={styles.buttonContainer}>
-          <TouchableOpacity
-            style={styles.button}
-            onPress={() => setSelectedModel(null)}
-          >
-            <Text style={styles.textButton}>Model Değiştir</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.button} onPress={() => router.back()}>
-            <Text style={styles.textButton}>Geri Dön</Text>
-          </TouchableOpacity>
-        </View>
       </SafeAreaView>
     </DrawingProvider>
   );
@@ -146,20 +197,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: "center",
   },
-  button: {
-    backgroundColor: "white",
-    padding: 14,
-    flex: 1,
-    marginHorizontal: 10,
-    justifyContent: "center",
-    alignItems: "center",
-    borderRadius: 8,
-  },
-  textButton: {
-    fontFamily: "Inter-Bold",
-    color: "black",
-    fontSize: 14,
-  },
   modelListContainer: {
     padding: 20,
     gap: 10,
@@ -174,10 +211,6 @@ const styles = StyleSheet.create({
     color: "black",
     fontSize: 16,
     textAlign: "center",
-  },
-  buttonContainer: {
-    flexDirection: "row",
-    padding: 20,
   },
 });
 
